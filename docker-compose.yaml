@@ -1,0 +1,5 @@
+services:
+  brightness:
+    image: ghcr.io/watsona4/brightness:latest
+    build: .
+    restart: unless-stopped
