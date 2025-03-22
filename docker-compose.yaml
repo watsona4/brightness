@@ -2,4 +2,9 @@ services:
   brightness:
     image: ghcr.io/watsona4/brightness:latest
     build: .
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     restart: unless-stopped
+    env_file:
+      - config.env
