@@ -8,8 +8,8 @@ import time
 from typing import Callable
 
 import paho.mqtt.client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
 import pandas as pd
+from paho.mqtt.enums import CallbackAPIVersion
 from pvlib import atmosphere, clearsky, irradiance, location  # type: ignore
 
 MQTT_HOST: str = str(os.environ.get("MQTT_HOST", ""))
@@ -30,6 +30,9 @@ def handler(signum: int, frame: Callable):
     CLIENT.disconnect()
     CLIENT.loop_stop()
     sys.exit(signum)
+
+
+signal.signal(signal.SIGTERM, handler)
 
 
 async def publish_data(loc: location.Location) -> mqtt.MQTTMessageInfo:
@@ -70,14 +73,22 @@ async def publish_data(loc: location.Location) -> mqtt.MQTTMessageInfo:
     return CLIENT.publish("brightness", msg, qos=1)
 
 
+def on_healthcheck(client, userdata, message):
+    logging.info("Healthcheck requested...")
+    if message.payload.decode() == "CHECK":
+        client.publish("brightness/healthcheck/status", "OK")
+
+
 def main():
 
     CLIENT.enable_logger()
 
     CLIENT.connect(MQTT_HOST, MQTT_PORT, 60)
-    CLIENT.loop_start()
 
-    signal.signal(signal.SIGTERM, handler)
+    CLIENT.subscribe("brightness/healthcheck/status")
+    CLIENT.message_callback_add("brightness/healthcheck/status", on_healthcheck)
+
+    CLIENT.loop_start()
 
     CLIENT.publish(
         "homeassistant/sensor/brightness/brightness/config",
