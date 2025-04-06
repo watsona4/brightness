@@ -6,7 +6,7 @@ ENV HDF5_DISABLE_VERSION_CHECK=1
 
 COPY brightness.py healthcheck.sh ./
 
-HEALTHCHECK --interval=15m CMD ./healthcheck.sh
+HEALTHCHECK CMD ./healthcheck.sh
 
 LABEL org.opencontainers.image.source=https://github.com/watsona4/brightness
 
