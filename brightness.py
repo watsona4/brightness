@@ -84,12 +84,16 @@ def main():
 
     CLIENT.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
+    CLIENT.will_set(f"{BASE_TOPIC}/availability", "offline", qos=1, retain=True)
+
     CLIENT.connect(MQTT_HOST, MQTT_PORT, 60)
 
     CLIENT.loop_start()
 
+    CLIENT.publish(f"{BASE_TOPIC}/availability", "online", qos=1, retain=True)
+
     CLIENT.publish(
-        DISCOVERY_PREFIX + "/sensor/brightness/brightness/config",
+        f"{DISCOVERY_PREFIX}/sensor/brightness/brightness/config",
         json.dumps({
             "name": "Solar Irradiance",
             "state_topic": BASE_TOPIC,
@@ -101,6 +105,14 @@ def main():
             "unit_of_measurement": "W/m²",
             "state_class": "measurement",
             "json_attributes_topic": BASE_TOPIC,
+            "availability_topic": f"{BASE_TOPIC}/availability",
+            "qos": 1,
+            "device": {
+                "identifiers": ["custom-brightness-publisher"],
+                "name": "Brightness Publisher",
+                "manufacturer": "custom",
+                "model": "pvlib-ineichen",
+            },
         }),
         retain=True,
     )
