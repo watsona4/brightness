@@ -17,6 +17,9 @@ MQTT_PORT: int = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_USERNAME: str = str(os.environ.get("MQTT_USERNAME", ""))
 MQTT_PASSWORD: str = str(os.environ.get("MQTT_PASSWORD", ""))
 
+DISCOVERY_PREFIX: str = str(os.environ.get("DISCOVERY_PREFIX", "homeassistant"))
+BASE_TOPIC: str = str(os.environ.get("BASE_TOPIC", "brightness"))
+
 LATITUDE: float = float(os.environ.get("LATITUDE", 0))
 LONGITUDE: float = float(os.environ.get("LONGITUDE", 0))
 ALTITUDE: float = float(os.environ.get("ALTITUDE", 0))
@@ -72,13 +75,7 @@ async def publish_data(loc: location.Location) -> mqtt.MQTTMessageInfo:
     msg = irr.T.squeeze().to_json(orient="index")
     logging.info(f"publishing {msg=}")
 
-    return CLIENT.publish("brightness", msg, qos=1)
-
-
-def on_healthcheck(client, userdata, message):
-    logging.info("Healthcheck requested...")
-    if message.payload.decode() == "CHECK":
-        client.publish("brightness/healthcheck/status", "OK")
+    return CLIENT.publish(BASE_TOPIC, msg, qos=1)
 
 
 def main():
@@ -89,16 +86,13 @@ def main():
 
     CLIENT.connect(MQTT_HOST, MQTT_PORT, 60)
 
-    CLIENT.subscribe("brightness/healthcheck/status")
-    CLIENT.message_callback_add("brightness/healthcheck/status", on_healthcheck)
-
     CLIENT.loop_start()
 
     CLIENT.publish(
-        "homeassistant/sensor/brightness/brightness/config",
+        DISCOVERY_PREFIX + "/sensor/brightness/brightness/config",
         json.dumps({
             "name": "Solar Irradiance",
-            "state_topic": "brightness",
+            "state_topic": BASE_TOPIC,
             "value_template": (
                 "{{ (value_json.poa_global|float - value_json.poa_direct|float) + 1 }}"
             ),
@@ -106,7 +100,7 @@ def main():
             "device_class": "irradiance",
             "unit_of_measurement": "W/m²",
             "state_class": "measurement",
-            "json_attributes_topic": "brightness",
+            "json_attributes_topic": BASE_TOPIC,
         }),
         retain=True,
     )
