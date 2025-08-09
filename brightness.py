@@ -75,7 +75,11 @@ async def publish_data(loc: location.Location) -> mqtt.MQTTMessageInfo:
     msg = irr.T.squeeze().to_json(orient="index")
     logging.info(f"publishing {msg=}")
 
-    return CLIENT.publish(BASE_TOPIC, msg, qos=1)
+    CLIENT.publish(BASE_TOPIC, msg, qos=1)
+
+    # Touch a heartbeat file for the Docker healthcheck
+    with open("/tmp/last_publish", "w") as f:
+        f.write(str(time.time()))
 
 
 def main():
