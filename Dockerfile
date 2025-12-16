@@ -8,8 +8,8 @@ COPY brightness.py healthcheck.py ./
 
 RUN chmod +x healthcheck.py
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD python3 healthcheck.py
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD test -f /tmp/last_publish && [ $(( $(date +%s) - $(cat /tmp/last_publish) )) -lt 180 ]
 
 LABEL org.opencontainers.image.source=https://github.com/watsona4/brightness
 

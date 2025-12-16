@@ -26,9 +26,17 @@ ALTITUDE: float = float(os.environ.get("ALTITUDE", 0))
 
 TZ: str = str(os.environ.get("TZ", "UTC"))
 
-CLIENT: mqtt.Client = mqtt.Client(CallbackAPIVersion.VERSION2)
+CLIENT: mqtt.Client = mqtt.Client(
+    callback_api_version=CallbackAPIVersion.VERSION2,
+    client_id="brightness-publisher",
+    clean_session=True,
+)
 
 logging.basicConfig(format="%(asctime)s [%(levelname)s]: %(message)s", level=logging.DEBUG)
+
+
+def on_disconnect(client, userdata, rc, properties=None):
+    logging.warning(f"MQTT disconnected rc={rc}")
 
 
 def handler(signum: int, frame: Callable):
@@ -90,8 +98,11 @@ def main():
 
     CLIENT.will_set(f"{BASE_TOPIC}/availability", "offline", qos=1, retain=True)
 
-    CLIENT.connect(MQTT_HOST, MQTT_PORT, 60)
+    CLIENT.reconnect_delay_set(min_delay=1, max_delay=60)
 
+    CLIENT.on_disconnect = on_disconnect
+
+    CLIENT.connect_async(MQTT_HOST, MQTT_PORT, keepalive=120)
     CLIENT.loop_start()
 
     CLIENT.publish(f"{BASE_TOPIC}/availability", "online", qos=1, retain=True)
@@ -101,9 +112,7 @@ def main():
         json.dumps({
             "name": "Solar Irradiance",
             "state_topic": BASE_TOPIC,
-            "value_template": (
-                "{{ (value_json.poa_global|float - value_json.poa_direct|float) + 1 }}"
-            ),
+            "value_template": "{{ (value_json.poa_global|float - value_json.poa_direct|float) + 1 }}",
             "unique_id": "17c4c005-01ad-4c87-8cc6-a4901ff1ebd0",
             "device_class": "irradiance",
             "unit_of_measurement": "W/m²",
