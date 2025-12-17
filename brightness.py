@@ -105,7 +105,6 @@ def get_fix_from_gpsd(host: str, port: int = 2947, timeout_s: int = 5) -> Option
     return None
 
 
-
 def handler(signum: int, frame: Callable):
     try:
         CLIENT.publish(f"{BASE_TOPIC}/availability", "offline", qos=1, retain=True)
@@ -134,9 +133,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
             json.dumps({
                 "name": "Solar Irradiance",
                 "state_topic": BASE_TOPIC,
-                "value_template": (
-                    "{{ (value_json.poa_global|float - value_json.poa_direct|float) + 1 }}"
-                ),
+                "value_template": "{{ (value_json.poa_global|float - value_json.poa_direct|float) + 1 }}",
                 "unique_id": "17c4c005-01ad-4c87-8cc6-a4901ff1ebd0",
                 "device_class": "irradiance",
                 "unit_of_measurement": "W/m²",
