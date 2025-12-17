@@ -30,7 +30,7 @@ def main() -> int:
 
     # ---- 2) optional: TCP reachability check (no MQTT connect) ----
     # This avoids generating "auto-..." clients in Mosquitto logs.
-    if os.getenv("HEALTHCHECK_TCP", "1") == "1":
+    if os.getenv("HEALTHCHECK_TCP", "0") == "1":
         host = os.getenv("MQTT_HOST", "").strip()
         port = int(os.getenv("MQTT_PORT", "1883"))
         if host:
