@@ -2,6 +2,9 @@ FROM ghcr.io/watsona4/python-pvlib:latest
 
 ENV HDF5_DISABLE_VERSION_CHECK=1
 
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY brightness.py healthcheck.py ./
 
 RUN chmod +x healthcheck.py

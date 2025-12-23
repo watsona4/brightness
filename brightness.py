@@ -13,6 +13,12 @@ import pandas as pd
 from paho.mqtt.enums import CallbackAPIVersion
 from pvlib import atmosphere, clearsky, irradiance, location  # type: ignore
 
+# Optional timezone lookup from coordinates (gpsd)
+try:
+    from timezonefinder import TimezoneFinder
+except ImportError:
+    TimezoneFinder = None
+
 MQTT_HOST: str = str(os.environ.get("MQTT_HOST", "")).strip()
 MQTT_PORT: int = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_USERNAME: str = str(os.environ.get("MQTT_USERNAME", "")).strip()
@@ -52,6 +58,7 @@ CLIENT: mqtt.Client = mqtt.Client(
 logging.basicConfig(format="%(asctime)s [%(levelname)s]: %(message)s", level=logging.DEBUG)
 
 _connected: bool = False
+_tz_finder: Optional[TimezoneFinder] = TimezoneFinder() if TimezoneFinder is not None else None
 
 
 def get_fix_from_gpsd(host: str, port: int = 2947, timeout_s: int = 5) -> Optional[Tuple[float, float, float]]:
@@ -102,6 +109,22 @@ def get_fix_from_gpsd(host: str, port: int = 2947, timeout_s: int = 5) -> Option
     except Exception as e:
         logging.warning("gpsd lookup failed (%s:%s): %s", host, port, e)
 
+    return None
+
+
+def lookup_timezone(lat: float, lon: float) -> Optional[str]:
+    """Best-effort timezone lookup for coordinates."""
+    if _tz_finder is None:
+        logging.debug("timezonefinder not available, using configured TZ")
+        return None
+
+    try:
+        tz_name = _tz_finder.timezone_at(lat=lat, lng=lon)
+        if tz_name:
+            return tz_name
+        logging.warning("No timezone found for lat=%s lon=%s, using configured TZ", lat, lon)
+    except Exception as e:
+        logging.warning("Timezone lookup failed for lat=%s lon=%s: %s", lat, lon, e)
     return None
 
 
@@ -161,8 +184,8 @@ def on_disconnect(client, userdata, rc, properties=None):
     logging.warning("MQTT disconnected rc=%s", rc)
 
 
-def publish_data(loc: location.Location) -> None:
-    now = pd.Timestamp.now(tz=TZ)
+def publish_data(loc: location.Location, tz: str) -> None:
+    now = pd.Timestamp.now(tz=tz)
     times = pd.DatetimeIndex([now])
 
     solpos = loc.get_solarposition(times)
@@ -203,7 +226,9 @@ def publish_data(loc: location.Location) -> None:
 
 
 def main():
-    global LATITUDE, LONGITUDE, ALTITUDE
+
+    lat, lon, alt = LATITUDE, LONGITUDE, ALTITUDE
+    tz = TZ
 
     CLIENT.enable_logger()
 
@@ -225,11 +250,17 @@ def main():
     if GPSD_HOST:
         fix = get_fix_from_gpsd(GPSD_HOST, GPSD_PORT, GPSD_TIMEOUT_S)
         if fix:
-            LATITUDE, LONGITUDE, ALTITUDE = fix
-            logging.info("Using gpsd fix: lat=%s lon=%s alt=%sm", LATITUDE, LONGITUDE, ALTITUDE)
+            lat, lon, alt = fix
+            logging.info("Using gpsd fix: lat=%s lon=%s alt=%sm", lat, lon, alt)
+            gps_tz = lookup_timezone(lat, lon)
+            if gps_tz:
+                tz = gps_tz
+                logging.info("Using timezone from gpsd fix: %s", tz)
         else:
             logging.warning("gpsd configured but no fix, using env LAT/LON/ALT")
         last_gpsd_check = time.time()
+
+    logging.info("Active timezone: %s", tz)
 
     CLIENT.connect_async(MQTT_HOST, MQTT_PORT, keepalive=MQTT_KEEPALIVE_S)
     CLIENT.loop_start()
@@ -239,7 +270,8 @@ def main():
     while not _connected and time.time() - start < 30:
         time.sleep(0.2)
 
-    loc = location.Location(LATITUDE, LONGITUDE, TZ, ALTITUDE)
+    loc = location.Location(lat, lon, tz, alt, "Home")
+    logging.info(loc)
 
     while True:
         # Periodically refresh GPSD coordinates (optional)
@@ -247,14 +279,19 @@ def main():
             fix = get_fix_from_gpsd(GPSD_HOST, GPSD_PORT, GPSD_TIMEOUT_S)
             last_gpsd_check = time.time()
             if fix:
-                LATITUDE, LONGITUDE, ALTITUDE = fix
-                loc = location.Location(LATITUDE, LONGITUDE, TZ, ALTITUDE)
-                logging.info("Updated gpsd fix: lat=%s lon=%s alt=%sm", LATITUDE, LONGITUDE, ALTITUDE)
+                lat, lon, alt = fix
+                gps_tz = lookup_timezone(lat, lon)
+                if gps_tz:
+                    tz = gps_tz
+                    logging.info("Using timezone from gpsd fix: %s", tz)
+                loc = location.Location(lat, lon, tz, alt)
+                logging.info("Updated gpsd fix: lat=%s lon=%s alt=%sm", lat, lon, alt)
+                logging.info(loc)
             else:
                 logging.warning("gpsd refresh failed, keeping previous location")
 
         if _connected:
-            publish_data(loc)
+            publish_data(loc, tz)
         else:
             logging.warning("MQTT not connected, skipping publish")
 
